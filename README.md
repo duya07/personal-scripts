@@ -16,9 +16,7 @@
 安装并运行：
 
 ```bash
-wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/kejilion.sh
-chmod +x kejilion.sh
-./kejilion.sh
+wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/kejilion.sh && chmod +x kejilion.sh && ./kejilion.sh
 ```
 
 ### 2. 端口流量狗
@@ -39,9 +37,7 @@ chmod +x kejilion.sh
 安装并运行：
 
 ```bash
-wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/port-traffic-dog.sh
-chmod +x port-traffic-dog.sh
-./port-traffic-dog.sh
+wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
 ```
 
 Alpine 安装并运行：
@@ -56,12 +52,10 @@ wget -O alpine-port-traffic-dog-preinstall.sh https://v6.gh-proxy.org/https://ra
 
 - 修改默认 Telegram API 路径，以便在大陆网络环境下使用。
 
-安装并运行：
+安装：
 
 ```bash
-wget -O telegram.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/telegram.sh
-chmod +x telegram.sh
-./telegram.sh
+wget -O telegram.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/telegram.sh && chmod +x telegram.sh
 ```
 
 
