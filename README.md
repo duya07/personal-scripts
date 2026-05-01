@@ -16,7 +16,7 @@
 安装并运行：
 
 ```bash
-wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/kejilion.sh && chmod +x kejilion.sh && ./kejilion.sh
+wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/kejilion.sh && chmod +x kejilion.sh && ./kejilion.sh
 ```
 
 ### 2. 端口流量狗
@@ -37,13 +37,13 @@ wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/du
 安装并运行：
 
 ```bash
-wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
+wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
 ```
 
 Alpine 安装并运行：
 
 ```bash
-wget -O alpine-port-traffic-dog-preinstall.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/alpine-port-traffic-dog-preinstall.sh && chmod +x alpine-port-traffic-dog-preinstall.sh && ./alpine-port-traffic-dog-preinstall.sh && wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
+wget -O alpine-port-traffic-dog-preinstall.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/alpine-port-traffic-dog-preinstall.sh && chmod +x alpine-port-traffic-dog-preinstall.sh && ./alpine-port-traffic-dog-preinstall.sh && wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
 ```
 
 #### 2.2 telegram.sh
@@ -55,7 +55,7 @@ wget -O alpine-port-traffic-dog-preinstall.sh https://v6.gh-proxy.org/https://ra
 安装：
 
 ```bash
-wget -O telegram.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/telegram.sh && chmod +x telegram.sh
+wget -O telegram.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/telegram.sh && chmod +x telegram.sh
 ```
 
 
