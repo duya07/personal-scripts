@@ -37,7 +37,7 @@ sudo wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.c
 安装并运行：
 
 ```bash
-sudo wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
+sudo wget -O /usr/local/bin/port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
 ```
 
 Alpine 安装并运行：
