@@ -61,6 +61,7 @@ sudo wget -O /etc/port-traffic-dog/notifications/telegram.sh https://v6.gh-proxy
 ### 3. self-detect.sh
 
 ```bash
+apt install -y nmap tcpdump
 wget --user-agent="Mozilla/5.0" -O OpenGFW-linux-amd64 https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/OpenGFW-linux-amd64
 sudo wget -O self-detect.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/self-detect.sh && sudo chmod +x self-detect.sh
 ```
