@@ -27,8 +27,7 @@ sudo wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.c
 
 修改说明：
 
-- 优先使用 `port-traffic-dog.sh` 同目录下的 `wecom.sh` 通知模块。
-- 本地通知模块会同步到实际运行目录：`/etc/port-traffic-dog/notifications/`。
+- 通知模块会按需同步到实际运行目录：`/etc/port-traffic-dog/notifications/`。
 - 如果通知模块已存在，则不会再从 GitHub 下载并覆盖。
 - 如果缺少通知模块，仅从 GitHub 补齐缺失文件，不覆盖已有文件。
 
@@ -52,5 +51,5 @@ sudo wget -O self-detect.sh https://v6.gh-proxy.org/https://raw.githubuserconten
 ## 注意事项
 
 - 脚本可能会修改系统配置或安装依赖，建议先在测试环境运行。
-- 如需使用通知功能，请提前准备好企业微信相关配置。
+- 如需使用通知功能，请提前准备好相关配置。
 - 若脚本下载失败，可检查代理地址或手动替换为可访问的 raw GitHub 地址。
