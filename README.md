@@ -27,9 +27,9 @@ sudo wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.c
 
 修改说明：
 
-- 优先使用 `port-traffic-dog.sh` 同目录下的 `telegram.sh` / `wecom.sh` 通知模块。
+- 优先使用 `port-traffic-dog.sh` 同目录下的 `wecom.sh` 通知模块。
 - 本地通知模块会同步到实际运行目录：`/etc/port-traffic-dog/notifications/`。
-- 如果 `telegram.sh` 和 `wecom.sh` 两个通知模块都已存在，则不会再从 GitHub 下载并覆盖。
+- 如果通知模块已存在，则不会再从 GitHub 下载并覆盖。
 - 如果缺少通知模块，仅从 GitHub 补齐缺失文件，不覆盖已有文件。
 
 > 当前修改尚未完全测试，请在生产环境使用前先进行验证。
@@ -38,24 +38,6 @@ sudo wget -O kejilion.sh https://v6.gh-proxy.org/https://raw.githubusercontent.c
 
 ```bash
 sudo wget -O /usr/local/bin/port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
-```
-
-Alpine 安装并运行：
-
-```bash
-sudo wget -O alpine-port-traffic-dog-preinstall.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/alpine-port-traffic-dog-preinstall.sh && chmod +x alpine-port-traffic-dog-preinstall.sh && ./alpine-port-traffic-dog-preinstall.sh && wget -O port-traffic-dog.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/port-traffic-dog.sh && chmod +x port-traffic-dog.sh && ./port-traffic-dog.sh
-```
-
-#### 2.2 telegram.sh
-
-修改说明：
-
-- 修改默认 Telegram API 路径，以便在大陆网络环境下使用。
-
-安装：
-
-```bash
-sudo wget -O /etc/port-traffic-dog/notifications/telegram.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/telegram.sh && sudo chmod +x /etc/port-traffic-dog/notifications/telegram.sh
 ```
 
 ### 3. self-detect.sh
@@ -70,5 +52,5 @@ sudo wget -O self-detect.sh https://v6.gh-proxy.org/https://raw.githubuserconten
 ## 注意事项
 
 - 脚本可能会修改系统配置或安装依赖，建议先在测试环境运行。
-- 如需使用通知功能，请提前准备好 Telegram 或企业微信相关配置。
+- 如需使用通知功能，请提前准备好企业微信相关配置。
 - 若脚本下载失败，可检查代理地址或手动替换为可访问的 raw GitHub 地址。
