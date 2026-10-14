@@ -8,7 +8,8 @@
 <a href="#kejilion">🔧 kejilion.sh</a> ·
 <a href="#traffic-dog">🐶 端口流量狗</a> ·
 <a href="#self-detect">🔍 self-detect.sh</a> ·
-<a href="#easy-caddy">🌐 easy_Caddy</a>
+<a href="#easy-caddy">🌐 easy_Caddy</a> ·
+<a href="#ip-allowlist">🛡️ IP 白名单</a>
 
 </div>
 
@@ -25,6 +26,7 @@
 | [`port-traffic-dog.sh`](#traffic-dog) | 按端口统计与限制流量 | `v1.2.5` | [zywe03/realm-xwPF](https://github.com/zywe03/realm-xwPF/blob/main/port-traffic-dog-README.md) |
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
 | [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | — | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
+| [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | — | — |
 
 <br>
 
@@ -137,6 +139,69 @@ bash self-detect.sh --help
 - **维护**：证书查看与复制同步、域名日志、手动编辑配置（应用前先校验）、卸载与依赖管理。
 
 安装命令与完整说明见该仓库 README。
+
+<a id="ip-allowlist"></a>
+
+## 🛡️ 5 · ip-port-allowlist.sh —— IP / 端口白名单
+
+Linux 下按端口做 IPv4/IPv6、TCP/UDP、IP/CIDR 来源白名单与「拒绝全部来源」封锁；覆盖目标配置、编辑、移除、实际规则查看与事务恢复。无参数启动交互菜单（root），带参走 CLI。
+
+- **菜单**：1–9 / 0 / 条件 R 原有语义不变，新增 10 日志、11 日志轮转与清除设置；子页面共用面板标题。
+- **依赖**：Bash 4.4+（不可用 `sh`）、完整 Perl 核心模块与兼容 Linux 工具（`iptables`/`ip6tables`/`iproute2`/`flock`/`sync`/`timeout` 等），不依赖 Python / jq。
+- **检测**：`doctor` 仅检测；`doctor --install` 需显式输入 `yes` 才会安装缺失依赖。
+- **状态与日志**：状态默认 `/root/.ip-port-allowlist.json`，日志目录 `/root/.ip-port-allowlist.logs`；可用 `IP_PORT_ALLOWLIST_DIR` 隔离文件，但不隔离受管链归属（仍需 `unshare -n` 隔离测试）。
+- **日志**：`operations` 默认 `on`，`connections` 默认 `off`（可设 `deny`/`all`）；连接日志为非终止 LOG 在既有 RETURN/DROP 前的限速数据包采样，`RETURN` 仅表示本脚本来源规则命中，不代表后续 filter 最终接受。查看时触发有界采集（`journalctl` 仅读本实例 prefix），来源暂不可用时仍可读取已保存记录。
+- **轮转与清理**：按 `max_mib`/`keep`/`retention_days`/`rate`/`burst`/`auto_rotate` 设置管理（默认 10 MiB / 5 份 / 30 天 / 10 次采样/分钟 / 突发 5 / 自动轮转 on，限速为包匹配限速）；`log-rotate`/`log-clear --confirm CLEAR` 仅清理本脚本私有文件，不删除系统 journal，不建 cron/daemon。
+
+### 🚀 下载
+
+```bash
+# 中文版
+wget -O ip-port-allowlist.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/ip-port-allowlist.sh && chmod +x ip-port-allowlist.sh
+# 英文版（仅消息文本不同，行为一致）
+wget -O ip-port-allowlist-en.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/ip-port-allowlist-en.sh && chmod +x ip-port-allowlist-en.sh
+```
+
+```bash
+# 无参数进菜单（需 root）
+sudo bash ./ip-port-allowlist.sh
+# 中英文分别直接执行
+sudo bash ./ip-port-allowlist-en.sh
+```
+
+### 🧩 常用 CLI（示例 IP/端口请替换为实际值，执行真实修改前请自行备份）
+
+```bash
+# 预检（不改状态/规则）
+sudo bash ./ip-port-allowlist.sh validate --ips 203.0.113.10 --ports 8443 --family 4 --proto both
+
+# 配置目标主机地址（仅 /32 或 /128，需替换为服务器自身目标地址；如首次为空或旧版 v1 状态，有非 lo global 地址时会自动探测目标）
+sudo bash ./ip-port-allowlist.sh targets --family 4 --ips 203.0.113.20
+
+# 设置/替换白名单（family 默认 auto，remove/block 默认 both；仅当对应族无目标时需先 targets 配置，示例来源 203.0.113.10 与目标 203.0.113.20 独立）
+sudo bash ./ip-port-allowlist.sh set --ips 203.0.113.10 --ports 8443 --family 4 --proto both
+
+# 查看
+sudo bash ./ip-port-allowlist.sh show --json
+sudo bash ./ip-port-allowlist.sh show --live --json
+
+# 日志：查看与设置（type 默认 both，lines 默认 50；支持 --json）
+sudo bash ./ip-port-allowlist.sh logs --type both --lines 50
+sudo bash ./ip-port-allowlist.sh logs --status
+sudo bash ./ip-port-allowlist.sh log-settings --json
+sudo bash ./ip-port-allowlist.sh log-settings --set connections deny
+sudo bash ./ip-port-allowlist.sh log-rotate --type both
+sudo bash ./ip-port-allowlist.sh log-clear --type both --confirm CLEAR
+```
+
+> [!TIP]
+> 查看连接日志前需先将 `connections` 设为 `deny` 或 `all`；设置后会重建受管链，仅新增 LOG 规则。
+
+- **SSH 防误封**：变更前会检查 `SSH_CONNECTION`，若会阻断当前 SSH 来源则拒绝写入。
+- **事务与恢复**：失败或可捕获的中断/异常自动回滚内核/状态；强制终止后保留 journal，下次 `recover` 恢复；状态文件损坏时用 `repair-state --from-live/--empty` 引导修复，未完成事务优先 `recover`。
+- **开机恢复**：保存状态不等于开机自动恢复，`restore` 需自行安排启动任务，不会自动创建服务。
+
+<br>
 
 ---
 
