@@ -236,6 +236,53 @@ sub saverules {
     }
     (\@rules,\@chains);
 }
+# Compare the saved model with one read-only kernel snapshot; normalize only iptables defaults.
+sub logging_rule_key {
+    my($a)=@_;my @v=@$a;my %extra;my $islog=grep {$_ eq 'LOG'} @v;
+    if($islog){
+        rebuild_log(\@v);my @plain;
+        for(my $i=0;$i<@v;$i++){my $k=$v[$i];my $v=$v[++$i];
+            next if $k eq '-m'&&$v eq 'limit';
+            if($k=~/\A(?:--limit|--limit-burst|--log-prefix|--log-level)\z/){$extra{$k}=$v}else{push @plain,$k,$v}
+        }
+        @v=@plain;
+    }
+    my $f=rebuild_fields(\@v,'rule');my $src=defined($f->{src})?(ipnet($f->{src}))[0]:'';
+    my @key=($f->{proto}//'',0+($f->{port}//0),$src,$f->{jump}//'');
+    if($islog){my $rate=$extra{'--limit'};$rate=~s{/minute\z}{/min};push @key,$rate,0+($extra{'--limit-burst'}//5),$extra{'--log-prefix'},0+$extra{'--log-level'}}
+    return \@key;
+}
+sub logging_check {
+    my($statepath,$cfgpath,$prefix,@paths)=@_;my $s=load($statepath);my $cfg=logging_settings_valid(readjson($cfgpath));
+    my(%families,$total);$total=0;my $overall='synchronized';
+    for my $i(0,1){
+        my $f=$i==0?'4':'6';my(@wanted,@hooks);my $logs=0;
+        for my $pr(qw(tcp udp)){for my $n(sort {$a<=>$b} keys %{$s->{rules}{$f}{$pr}}){
+            for my $src(@{$s->{rules}{$f}{$pr}{$n}}){
+                if($cfg->{connections} eq 'all'){push @wanted,[$pr,0+$n,$src,'LOG',"$cfg->{rate}/min",0+$cfg->{burst},"${prefix}_A ",6];$logs++}
+                push @wanted,[$pr,0+$n,$src,'RETURN'];
+            }
+            if($cfg->{connections} ne 'off'){push @wanted,[$pr,0+$n,'','LOG',"$cfg->{rate}/min",0+$cfg->{burst},"${prefix}_D ",6];$logs++}
+            push @wanted,[$pr,0+$n,'','DROP'];
+        }}
+        for my $pr(qw(tcp udp)){for my $t(@{$s->{targets}{$f}}){push @hooks,[$pr,$t] if keys %{$s->{rules}{$f}{$pr}}}}
+        $total+=$logs;my $detail={expected_log_rules=>$logs,status=>'unavailable'};$families{$f}=$detail;
+        if(!defined($paths[$i])||$paths[$i] eq '-'){ $overall='unavailable' unless $overall eq 'mismatch';next }
+        my $match=eval {
+            my $snap=snapshot_valid(readjson($paths[$i]));my $expected_chain=@wanted?1:0;
+            die "chain\n" unless @{$snap->{chains}}==$expected_chain;
+            my @actual=map {logging_rule_key([@$_[2..$#$_]])} @{$snap->{rules}};
+            die "rules\n" unless same(\@wanted,\@actual);
+            my @actual_hooks=map {my $v=rebuild_fields($_->{args},'hook');[$v->{proto}//'',defined($v->{dest})?(ipnet($v->{dest}))[0]:'']} @{$snap->{hooks}};
+            my $sorter=sub {my($v)=@_;[sort {$json->encode($a) cmp $json->encode($b)} @$v]};
+            die "hooks\n" unless same($sorter->(\@hooks),$sorter->(\@actual_hooks));
+            1;
+        };
+        $detail->{status}=$match?'synchronized':'mismatch';
+        $overall='mismatch' unless $match;
+    }
+    emit({rules_status=>$overall,expected_log_rules=>$total,families=>\%families});
+}
 # Terminal panels follow the reference Python display-width and wrapping rules.
 my($ui_width,$ui_color,$ui_uni)=(96,0,1);
 sub ui_text {my $s=$_[0];if(!$ui_uni){$s=~s/→/->/g;$s=~s/·/-/g}return $s}
@@ -366,6 +413,7 @@ my $ok=eval {
     elsif($cmd eq 'journal-snapshot'){my $j=journal($ARGV[0]);emit($j->{snapshots}{$ARGV[1]})}
     elsif($cmd eq 'journal-state'){my $j=journal($ARGV[0]);exit 3 unless defined $j->{state};print $j->{state}}
     elsif($cmd eq 'journal-log-settings'){my $j=journal($ARGV[0]);exit 3 unless exists $j->{logging};exit 4 unless defined $j->{logging};print $j->{logging}}
+    elsif($cmd eq 'logging-check'){logging_check(@ARGV)}
     elsif($cmd eq 'live-json'){
         my @p=@ARGV; my %fam; my $managed=0;
         for my $i(0,1){
@@ -1594,6 +1642,9 @@ sub cmd_view {
         outl($JSON->encode(\@recs));
     } else {
         outl(render_text_record($_)) for @recs;
+        if(!@recs){
+            outl($type eq 'operations'?'No operation records yet. When auditing is on, menu entry, rule views, log views and changes are recorded after they occur.':$type eq 'connections'?'No connection records yet. Check the capture diagnosis below; traffic before capture was enabled cannot be recovered.':'No operation or connection records yet. Completed actions are audited; connection capture must be enabled explicitly.');
+        }
     }
     return 0;
 }
@@ -1650,6 +1701,43 @@ sub cmd_stats_json {
     return 0;
 }
 
+sub cmd_report {
+    my($base,$probe,$source,$format)=arg_count('report',4,@_);
+    fail(msgf('err_bad_format',describe($format))) unless $format eq 'json'||$format eq 'text';
+    my $s=$JSONU->decode(read_input_file($base,$MAX_INPUT_BYTES));
+    my $p=$JSONU->decode(read_input_file($probe,$MAX_INPUT_BYTES));
+    my $mode=$s->{settings}{connections};my $rules=$p->{rules_status}//'unavailable';
+    my $stored=$s->{streams}{connections}{records}||grep {$_->{bytes}>0} @{$s->{streams}{connections}{archives}};
+    my($capture,$hint);
+    if($rules eq 'pending'||$rules eq 'busy'){
+        ($capture,$hint)=('rules-pending','Rules are being updated or a transaction needs recovery. Wait for completion, or run recover before checking again.');
+    }elsif($rules eq 'state-unreadable'){
+        ($capture,$hint)=('rules-unavailable','The policy state cannot be read, so capture rules cannot be verified. Stored logs remain readable; check or repair the state file.');
+    }elsif($rules eq 'mismatch'){
+        ($capture,$hint)=('rules-mismatch','Live managed rules differ from the policy or capture settings. Capture cannot be confirmed; inspect show --live and save the connection mode again after checking.');
+    }elsif($rules ne 'synchronized'){
+        ($capture,$hint)=('rules-unavailable','Live firewall rules cannot be read, so capture cannot be confirmed. Check dependencies and permissions; stored logs remain readable.');
+    }elsif($mode eq 'off'){
+        ($capture,$hint)=('disabled','Connection capture is disabled, so no new connection samples are produced. Stored records remain readable. Select deny or all in menu 10, or run log-settings --set connections deny.');
+    }elsif(!$p->{expected_log_rules}){
+        ($capture,$hint)=('not-configured','There are no managed port rules to sample. Configure target host addresses and port rules first.');
+    }elsif($source ne 'available'){
+        ($capture,$hint)=('source-unavailable','Capture rules match the settings, but the system journal is unavailable. Check journalctl; stored logs remain readable.');
+    }elsif($stored){
+        ($capture,$hint)=('recorded','Connection samples have been saved. The system journal is collected on view; records are neither a complete connection history nor proof of a later filter ACCEPT.');
+    }else{
+        ($capture,$hint)=('waiting',$mode eq 'deny'?'Deny capture is configured, with no saved records yet. Allowed sources are not logged. Access a managed target port from a disallowed source, refresh, and check the kernel journal.':'Source-match and deny capture is configured, with no saved records yet. Access a managed target port, refresh, and check the kernel journal.');
+    }
+    $s->{source_status}=$source;$s->{rules_status}=$rules;$s->{rule_details}=$p;
+    $s->{capture_status}=$capture;$s->{capture_hint}=$hint;
+    if($format eq 'json'){outl($JSON->encode($s))}
+    else{
+        outl("Connection capture: $capture; rules: $rules; source: $source");
+        outl($hint);
+        outl($s->{settings}{operations} eq 'on'?'Operation auditing is on: completed actions are recorded; status refreshes do not add audit records.':'Operation auditing is off: no new actions are recorded. Enable operations on in log settings.');
+    }
+    return 0;
+}
 sub cmd_stats_text {
     arg_count('stats-text', 0, @_);
     begin_storage(0);
@@ -1787,6 +1875,7 @@ my %DISPATCH = (
     'view'            => \&cmd_view,
     'stats-json'      => \&cmd_stats_json,
     'stats-text'      => \&cmd_stats_text,
+    'report'          => \&cmd_report,
     'rotate'          => \&cmd_rotate,
     'clear'           => \&cmd_clear,
     'maintain'        => \&cmd_maintain,
@@ -1909,6 +1998,33 @@ logging_collect() {
     [[ -s $WORK/journal.jsonl ]] || return 0
     log_data import "$WORK/journal.jsonl" > /dev/null || return 2
 }
+logging_probe() (
+    local namespace shared prefix f path4=- path6=-
+    namespace=$(stat -Lc '%i' /proc/self/ns/net) || namespace=''
+    shared=/run/ip-port-allowlist/net.$namespace.lock
+    if [[ -f $shared && ! -L $shared ]]; then
+        if ! { exec 8< "$shared" && flock -s -w 2 8; }; then printf '{"rules_status":"busy"}\n'; return 0; fi
+    fi
+    if [[ -f $LOCK && ! -L $LOCK ]]; then
+        if ! { exec 9< "$LOCK" && flock -s -w 2 9; }; then printf '{"rules_status":"busy"}\n'; return 0; fi
+    fi
+    if [[ -e $JOURNAL ]]; then printf '{"rules_status":"pending"}\n'; return 0; fi
+    log_data settings-json > "$WORK/probe-settings.json" || return 2
+    if ! data load "$STATE" > "$WORK/probe-state.json" 2> "$WORK/probe-state.err"; then printf '{"rules_status":"state-unreadable"}\n'; return 0; fi
+    prefix=$(log_data prefix) || return 2
+    for f in 4 6; do
+        if snapshot "$f" "$WORK/probe.$f" 2> "$WORK/probe.$f.err"; then
+            if [[ $f == 4 ]]; then path4=$WORK/probe.4; else path6=$WORK/probe.6; fi
+        fi
+    done
+    data logging-check "$WORK/probe-state.json" "$WORK/probe-settings.json" "$prefix" "$path4" "$path6"
+)
+logging_report() {
+    local format=$1
+    logging_probe > "$WORK/log-probe.json" || return 2
+    log_data stats-json > "$WORK/log-status.json" || return 2
+    log_data report "$WORK/log-status.json" "$WORK/log-probe.json" "${LOG_SOURCE_STATUS:-unavailable}" "$format"
+}
 logging_cli() {
     local cmd=$1 type=both lines=50 format=text status=0 confirm='' key='' value='' option
     shift
@@ -1931,30 +2047,35 @@ logging_cli() {
     [[ $type == operations || $type == connections || $type == both ]] || { error 'Log type must be operations, connections or both'; return 2; }
     [[ $lines =~ ^[0-9]{1,4}$ ]] && ((10#$lines>=1 && 10#$lines<=1000)) || { error 'Log line count must be an integer from 1 to 1000'; return 2; }
     [[ $cmd != log-clear || $confirm == CLEAR ]] || { error 'Log clearing requires --confirm CLEAR'; return 2; }
-    WORK='' TRANSACTION=0 RECOVERY_KEEP=0 LOG_SAVE_PENDING=0 AUDIT_ACTION=''
+    WORK='' TRANSACTION=0 RECOVERY_KEEP=0 LOG_SAVE_PENDING=0 AUDIT_ACTION='' AUDIT_DETAIL=''
     trap cleanup EXIT
     trap 'printf "\nOperation interrupted\n" >&2; exit 130' INT TERM
     logging_require || return 2
     WORK=$(mktemp -d "$DIR/.ip-port-allowlist-work.XXXXXXXX") || { error 'Could not create a temporary logging directory'; return 2; }
     case $cmd in
         logs)
+            if ((status==0)); then AUDIT_ACTION=logs-view; AUDIT_DETAIL="type=$type lines=$lines"; fi
             if ((status)) || [[ $type != operations ]]; then logging_collect || return 2; fi
             log_data maintain || return 2
             if ((status)); then
-                if [[ $format == json ]]; then
-                    log_data stats-json > "$WORK/log-status.json" || return 2
-                    perl -MJSON::PP -e 'local $/; open my $h,"<",$ARGV[0] or die "$!\n"; my $j=JSON::PP->new->canonical; my $s=$j->decode(<$h>); $s->{source_status}=$ARGV[1]; print $j->encode($s),"\n"' "$WORK/log-status.json" "${LOG_SOURCE_STATUS:-unavailable}"
-                else
-                    log_data stats-text || return 2
-                    printf 'Connection log source: %s (collected on view, sampled packets with a rate limit)\n' "${LOG_SOURCE_STATUS:-unavailable}"
-                fi
-            else log_data view "$type" "$lines" "$format"; fi ;;
+                if [[ $format == text ]]; then log_data stats-text || return 2; fi
+                logging_report "$format"
+            else
+                log_data view "$type" "$lines" "$format" || return 2
+                if [[ $format == text && $type != operations ]]; then logging_report text || return 2; fi
+            fi ;;
         log-settings) log_data "settings-$format" ;;
         log-rotate) AUDIT_ACTION=log-rotate; log_data rotate "$type" ;;
         log-clear)
-            # Audit a successful clear before deleting operations, keeping the selected stream empty.
-            if [[ $type == connections ]]; then AUDIT_ACTION=log-clear; else logging_audit log-clear 0 "type=$type"; fi
-            log_data clear "$type" "$confirm" ;;
+            # A successful operations clear stays empty; only failed clears survive as audit records.
+            if [[ $type == connections ]]; then
+                AUDIT_ACTION=log-clear; AUDIT_DETAIL="type=$type"; log_data clear "$type" "$confirm"
+            else
+                local clear_rc=0
+                log_data clear "$type" "$confirm" || clear_rc=$?
+                ((clear_rc==0)) || logging_audit log-clear "$clear_rc" "type=$type"
+                return "$clear_rc"
+            fi ;;
         log-maintain) AUDIT_ACTION=log-maintain; log_data maintain ;;
     esac
 }
@@ -2401,7 +2522,7 @@ cli() {
     if [[ $cmd == _logging-config ]]; then
         (($#==2)) || die 'Logging settings require a setting key and value'
         log_key=$1 log_value=$2; shift 2; AUDIT_ACTION=log-settings
-    elif [[ $cmd != show && $cmd != validate ]]; then AUDIT_ACTION=$cmd; fi
+    elif [[ $cmd != validate ]]; then AUDIT_ACTION=$cmd; fi
     while (($#)); do
         option=$1; shift
         case $option in
@@ -2447,6 +2568,8 @@ cli() {
     if [[ $cmd == validate ]]; then require_tools core || exit 2; data validate "$ips" "$ports" "$proto" "$family" || exit 2; exit 0; fi
     if [[ $cmd == _logging-config || $cmd == repair-state && $repair == backup-only ]]; then require_tools core || exit 2; else require_tools full || exit 2; fi
     AUDIT_DETAIL="dry_run=$dry"
+    if [[ $cmd == show ]]; then AUDIT_DETAIL="live=$live json=$json"
+    elif [[ $cmd == _logging-config ]]; then AUDIT_DETAIL="key=$log_key value=$log_value"; fi
     ((EUID==0)) || die 'root privileges are required'
     [[ -d $DIR ]] || die "State directory does not exist: $DIR"
     local namespace globaldir=/run/ip-port-allowlist
@@ -2913,6 +3036,14 @@ log_show() {
     logging_view "$1" "$2" || error 'Log read failed; see the backend error above'
     log_pause
 }
+log_sampling() {
+    local rc=0
+    log_word '  New mode [off/deny/all; Enter or 0 cancels]:' 'off/deny/all' off deny all || return $?
+    log_apply connections "$REPLY" 'deny samples rejected sources; all samples source matches and rejections. Only rate-limited samples after enabling are recorded; earlier traffic cannot be recovered. Saving updates LOG rules while preserving RETURN and DROP decisions.' || rc=$?
+    ((rc!=10 && rc!=11)) || return "$rc"
+    log_pause || return 11
+    return "$rc"
+}
 logs_menu() {
     local lines=50 rc=0
     while :; do
@@ -2923,17 +3054,19 @@ logs_menu() {
         menu_section 'View and settings'
         menu_option 1 'View operations log'; menu_option 2 'View connections log'
         menu_option 3 'View operations and connections logs'; menu_option 4 'Set number of lines'
+        menu_option 5 'Connection capture mode (off/deny/all)'
         menu_option 0 'Return to the main menu' '2;37'; printf '\n'
         printf '  Current number of lines: %s (default 50)\n' "$lines"
         while :; do
-            entry '  Select [0-4]:' || return $?
-            case $REPLY in 1|2|3|4) break ;; *) error 'Enter 0-4' ;; esac
+            entry '  Select [0-5]:' || return $?
+            case $REPLY in 1|2|3|4|5) break ;; *) error 'Enter 0-5' ;; esac
         done
         case $REPLY in
             1) log_show operations "$lines" 'View operations log' ;;
             2) log_show connections "$lines" 'View connections log' ;;
             3) log_show both "$lines" 'View operations and connections logs' ;;
             4) log_int '  Number of lines [1-1000; Enter keeps current, 0 cancels]:' 1 1000 "$lines" && lines=$REPLY ;;
+            5) log_sampling ;;
         esac
         rc=$?
         ((rc!=11)) || return 11
@@ -2982,7 +3115,7 @@ log_settings_menu() {
 }
 menu() {
     ((EUID==0)) || die 'root privileges are required'
-    local MENUWORK='' MENU_CHILD='' choice rc REPLY ready broken NOTICE='' STATUS=''
+    local MENUWORK='' MENU_CHILD='' MENU_AUDITED='' choice rc REPLY ready broken NOTICE='' STATUS=''
     local -a SUBMIT=()
     trap '[[ -z $MENUWORK ]] || rm -rf -- "$MENUWORK"' EXIT
     trap menu_interrupt INT TERM
@@ -3006,6 +3139,7 @@ menu() {
                 [[ ! -s $MENUWORK/read-error ]] || STATUS+=$'\n'"$(cat -- "$MENUWORK/read-error")"
             fi
         fi
+        if ((ready)) && [[ -z ${MENU_AUDITED:-} ]]; then logging_audit menu-open 0 ''; MENU_AUDITED=1; fi
         render_main_menu
         NOTICE=''
         local keys='[0-11]'

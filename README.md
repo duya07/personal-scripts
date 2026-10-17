@@ -146,12 +146,14 @@ bash self-detect.sh --help
 
 Linux 下按端口做 IPv4/IPv6、TCP/UDP、IP/CIDR 来源白名单与「拒绝全部来源」封锁；覆盖目标配置、编辑、移除、实际规则查看与事务恢复。无参数启动交互菜单（root），带参走 CLI。
 
-- **菜单**：1–9 / 0 / 条件 R 原有语义不变，新增 10 日志、11 日志轮转与清除设置；子页面共用面板标题。
+- **菜单**：1–9 / 0 / 条件 R 原有语义不变，10 日志、11 日志轮转与清除设置；日志页 5 可直接选择连接采样模式，仍需输入 `y` 保存。
 - **依赖**：Bash 4.4+（不可用 `sh`）、完整 Perl 核心模块与兼容 Linux 工具（`iptables`/`ip6tables`/`iproute2`/`flock`/`sync`/`timeout` 等），不依赖 Python / jq。
 - **检测**：`doctor` 仅检测；`doctor --install` 需显式输入 `yes` 才会安装缺失依赖。
 - **状态与日志**：状态默认 `/root/.ip-port-allowlist.json`，日志目录 `/root/.ip-port-allowlist.logs`；可用 `IP_PORT_ALLOWLIST_DIR` 隔离文件，但不隔离受管链归属（仍需 `unshare -n` 隔离测试）。
 - **日志**：`operations` 默认 `on`，`connections` 默认 `off`（可设 `deny`/`all`）；连接日志为非终止 LOG 在既有 RETURN/DROP 前的限速数据包采样，`RETURN` 仅表示本脚本来源规则命中，不代表后续 filter 最终接受。查看时触发有界采集（`journalctl` 仅读本实例 prefix），来源暂不可用时仍可读取已保存记录。
 - **轮转与清理**：按 `max_mib`/`keep`/`retention_days`/`rate`/`burst`/`auto_rotate` 设置管理（默认 10 MiB / 5 份 / 30 天 / 10 次采样/分钟 / 突发 5 / 自动轮转 on，限速为包匹配限速）；`log-rotate`/`log-clear --confirm CLEAR` 仅清理本脚本私有文件，不删除系统 journal，不建 cron/daemon。
+- **日志为空时**：`logs --status --json` 会区分采样关闭、无受管规则、规则不一致、日志源不可读和等待样本，并给出下一步提示。状态检查只核对受管规则与当前设置，不代表后续完整过滤链健康。
+- **操作审计**：开启时记录首次进入菜单、查看规则、查看日志及修改结果；实际完成后写入退出码，状态页刷新不重复生成记录。过去未开启采样的流量无法补回。
 
 ### 🚀 下载
 
@@ -188,6 +190,7 @@ sudo bash ./ip-port-allowlist.sh show --live --json
 # 日志：查看与设置（type 默认 both，lines 默认 50；支持 --json）
 sudo bash ./ip-port-allowlist.sh logs --type both --lines 50
 sudo bash ./ip-port-allowlist.sh logs --status
+sudo bash ./ip-port-allowlist.sh logs --status --json
 sudo bash ./ip-port-allowlist.sh log-settings --json
 sudo bash ./ip-port-allowlist.sh log-settings --set connections deny
 sudo bash ./ip-port-allowlist.sh log-rotate --type both
@@ -195,7 +198,7 @@ sudo bash ./ip-port-allowlist.sh log-clear --type both --confirm CLEAR
 ```
 
 > [!TIP]
-> 查看连接日志前需先将 `connections` 设为 `deny` 或 `all`；设置后会重建受管链，仅新增 LOG 规则。
+> 开启新的连接采样可在菜单 `10 → 5` 选择 `deny`（只记录拒绝）或 `all`（同时记录来源命中和拒绝），确认后保存；已有记录无需重新开启即可查看。设置会重建受管链中的 LOG 规则，原 RETURN/DROP 判定保持不变。
 
 - **SSH 防误封**：变更前会检查 `SSH_CONNECTION`，若会阻断当前 SSH 来源则拒绝写入。
 - **事务与恢复**：失败或可捕获的中断/异常自动回滚内核/状态；强制终止后保留 journal，下次 `recover` 恢复；状态文件损坏时用 `repair-state --from-live/--empty` 引导修复，未完成事务优先 `recover`。
