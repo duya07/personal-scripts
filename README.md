@@ -26,7 +26,7 @@
 | [`port-traffic-dog.sh`](#traffic-dog) | 按端口统计与限制流量 | `v1.2.5` | [zywe03/realm-xwPF](https://github.com/zywe03/realm-xwPF/blob/main/port-traffic-dog-README.md) |
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
 | [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | — | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
-| [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | — | — |
+| [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | `v1.0.0` | — |
 
 <br>
 
@@ -146,7 +146,7 @@ bash self-detect.sh --help
 
 Linux 下按端口做 IPv4/IPv6、TCP/UDP、IP/CIDR 来源白名单与「拒绝全部来源」封锁；覆盖目标配置、编辑、移除、实际规则查看与事务恢复。无参数启动交互菜单（root），带参走 CLI。
 
-- **菜单**：1–9 / 0 / 条件 R 原有语义不变，10 日志、11 日志轮转与清除设置；日志页 5 可直接选择连接采样模式，仍需输入 `y` 保存。
+- **菜单**：1–9 / 0 / 条件 R 原有语义不变，10 日志、11 日志轮转与清除设置、12 脚本版本与更新；日志页 5 可直接选择连接采样模式，仍需输入 `y` 保存。
 - **依赖**：Bash 4.4+（不可用 `sh`）、完整 Perl 核心模块与兼容 Linux 工具（`iptables`/`ip6tables`/`iproute2`/`flock`/`sync`/`timeout` 等），不依赖 Python / jq。
 - **检测**：`doctor` 仅检测；`doctor --install` 需显式输入 `yes` 才会安装缺失依赖。
 - **状态与日志**：状态默认 `/root/.ip-port-allowlist.json`，日志目录 `/root/.ip-port-allowlist.logs`；可用 `IP_PORT_ALLOWLIST_DIR` 隔离文件，但不隔离受管链归属（仍需 `unshare -n` 隔离测试）。
@@ -154,13 +154,15 @@ Linux 下按端口做 IPv4/IPv6、TCP/UDP、IP/CIDR 来源白名单与「拒绝�
 - **轮转与清理**：按 `max_mib`/`keep`/`retention_days`/`rate`/`burst`/`auto_rotate` 设置管理（默认 10 MiB / 5 份 / 30 天 / 10 次采样/分钟 / 突发 5 / 自动轮转 on，限速为包匹配限速）；`log-rotate`/`log-clear --confirm CLEAR` 仅清理本脚本私有文件，不删除系统 journal，不建 cron/daemon。
 - **日志为空时**：`logs --status --json` 会区分采样关闭、无受管规则、规则不一致、日志源不可读和等待样本，并给出下一步提示。状态检查只核对受管规则与当前设置，不代表后续完整过滤链健康。
 - **操作审计**：开启时记录首次进入菜单、查看规则、查看日志及修改结果；实际完成后写入退出码，状态页刷新不重复生成记录。过去未开启采样的流量无法补回。
+- **版本与更新**：当前 `1.0.0`。`--version` 离线显示版本与语言，`update --check` 只检查；菜单 12 / `update` 输入 `y` 后更新，也可用 `--confirm UPDATE`。更新仅替换运行的脚本文件，不重载规则、不改状态、日志或开机任务，成功后退出当前菜单，重新运行加载新版。
+- **更新校验与回退**：更新时才需要 `curl`，从本仓库的固定 HTTPS 直连地址取得 `ip-port-allowlist-release.json` 与当前语言脚本，检查版本、SHA-256、大小、语言和 Bash 语法；同版不覆盖、不降级。原文件备份到脚本旁 `.ip-port-allowlist-backups/`（0700，备份0600），原子替换失败或可捕获中断会保留/恢复原文件。安装文件及其目录需为 root 所有、不可由组或其他用户写入，脚本不能是软/硬链接；同步工具需支持 `sync -f`。更新不会自动安装工具或创建后台检查任务。
 
 ### 🚀 下载
 
 ```bash
 # 中文版
 wget -O ip-port-allowlist.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/ip-port-allowlist.sh && chmod +x ip-port-allowlist.sh
-# 英文版（仅消息文本不同，行为一致）
+# 英文版（同源生成；界面语言不同，更新保持所选语言）
 wget -O ip-port-allowlist-en.sh https://v6.gh-proxy.org/https://raw.githubusercontent.com/duya07/personal-scripts/main/ip-port-allowlist-en.sh && chmod +x ip-port-allowlist-en.sh
 ```
 
@@ -169,6 +171,21 @@ wget -O ip-port-allowlist-en.sh https://v6.gh-proxy.org/https://raw.githubuserco
 sudo bash ./ip-port-allowlist.sh
 # 中英文分别直接执行
 sudo bash ./ip-port-allowlist-en.sh
+```
+
+首次编号前的旧脚本需先下载新版一次；以后可使用下列更新入口。若使用普通用户目录下载，需先将脚本安装为 root 所有的正规文件（例如 `sudo install -o root -g root -m 700 ./ip-port-allowlist.sh /root/ip-port-allowlist.sh`），再从安装路径执行更新。
+
+```bash
+# 查看版本与仅检查更新（不改配置或规则）
+bash ./ip-port-allowlist.sh --version
+bash ./ip-port-allowlist.sh version --json
+bash ./ip-port-allowlist.sh update --check
+bash ./ip-port-allowlist.sh update --check --json
+
+# 运行已安装的文件；看到版本后输入 y 确认
+sudo bash /root/ip-port-allowlist.sh update
+# 明确确认的自动化调用
+sudo bash /root/ip-port-allowlist.sh update --confirm UPDATE
 ```
 
 ### 🧩 常用 CLI（示例 IP/端口请替换为实际值，执行真实修改前请自行备份）
@@ -212,7 +229,7 @@ sudo bash ./ip-port-allowlist.sh log-clear --type both --confirm CLEAR
 
 - 脚本可能修改系统配置或安装依赖，建议先在测试环境运行。
 - 如需使用通知功能，请提前准备好 Telegram Bot / 企业微信相关配置。
-- 所有下载命令默认走 `v6.gh-proxy.org` 代理；若下载失败，可检查代理可用性，或手动替换为可访问的 `raw.githubusercontent.com` 直连地址。
+- 首次下载示例默认走 `v6.gh-proxy.org` 代理；失败可检查代理或改用 `raw.githubusercontent.com` 直连地址。白名单脚本内置更新固定使用本仓库的 HTTPS 直连地址，下载或校验失败时保留现有脚本。
 
 <div align="center">
 

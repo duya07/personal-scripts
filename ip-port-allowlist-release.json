@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "product": "ip-port-allowlist",
+  "version": "1.0.0",
+  "files": {
+    "zh": {
+      "file": "ip-port-allowlist.sh",
+      "sha256": "f2a173ec0ac8d41a13f0587faf79f7e63b493075241406ed31547ad0e44a44c1",
+      "bytes": 175341
+    },
+    "en": {
+      "file": "ip-port-allowlist-en.sh",
+      "sha256": "b58d994cef5825fb48b5aeb799c5e3a6c97144c0ab581265086a02ea182019c5",
+      "bytes": 178541
+    }
+  }
+}

@@ -2,6 +2,10 @@
 # Requires Bash 4.4+, compatible Linux tools and full Perl core modules.
 # New/legacy configurations discover non-loopback global addresses with ip -j.
 # doctor/menu 9 installs missing dependencies only after explicit confirmation.
+# ip-port-allowlist standalone script
+SCRIPT_VERSION='1.0.0'
+SCRIPT_LANGUAGE='en'
+SCRIPT_ENTRY=${BASH_SOURCE[0]}
 set -u
 set -o pipefail
 umask 077
@@ -29,7 +33,7 @@ data() {
     if [[ -z $AUTO_ADDRESSES ]]; then
         AUTO_ADDRESSES=$(ip -j address show scope global) || { error 'Cannot detect local target addresses; check ip -j address show scope global'; return 2; }
     fi
-    IP_PORT_ALLOWLIST_AUTO_TARGETS=$AUTO_ADDRESSES perl - "$@" <<'PERL'
+    IP_PORT_ALLOWLIST_SCRIPT_VERSION=$SCRIPT_VERSION IP_PORT_ALLOWLIST_AUTO_TARGETS=$AUTO_ADDRESSES perl - "$@" <<'PERL'
 use strict;
 use warnings;
 use utf8;
@@ -329,7 +333,7 @@ sub render_panel {
         ui_edge($ui_uni?'╰':'+',$ui_uni?'╯':'+');print "\n";return;
     }
     fail('Invalid panel type') unless $kind eq 'menu';
-    ui_lines('IP / Port allowlist manager','1;36');ui_lines('IPv4 / IPv6  ·  TCP / UDP','2');
+    ui_lines('IP / Port allowlist manager'.'  v'.($ENV{IP_PORT_ALLOWLIST_SCRIPT_VERSION}//''),'1;36');ui_lines('IPv4 / IPv6  ·  TCP / UDP','2');
     ui_lines($note,'33') if length $note;
     ui_section('Current rules · saved');
     if(length $status){ui_lines('Rule read failed: '.$status,'31')}
@@ -350,9 +354,10 @@ sub render_panel {
     }
     ui_section('Actions');
     my @options=([1,'View allowlist / block rules','1;32'],[2,'Set / Replace allowlist','32'],[3,'Edit existing allowlist','36'],[4,'Remove restrictions from given ports','33'],[5,'Clear all restrictions','31'],[6,'View live firewall rules','36'],[7,'Block ports (deny all sources)','1;31'],[8,'Set target host addresses','36'],[9,'Check / install dependencies','36'],[10,'Logs','36'],[11,'Log rotation and clear settings','36']);
+    push @options,[12,'Script version and update','36'];
     push @options,['R','Repair the corrupt state file','1;31'] if $broken;
     push @options,[0,'Quit','2'];
-    my @labels=map {($_->[0] eq '10' || $_->[0] eq '11' ? $_->[0].' '.$_->[1] : $_->[0].'  '.$_->[1])} @options;my $column=int(($ui_width-10)/2);my $longest=0;
+    my @labels=map {($_->[0] =~ /\A1[012]\z/ ? $_->[0].' '.$_->[1] : $_->[0].'  '.$_->[1])} @options;my $column=int(($ui_width-10)/2);my $longest=0;
     for(@labels){my $n=ui_width($_);$longest=$n if $n>$longest}
     if($column>=$longest){
         for(my $i=0;$i<@options;$i+=2){
@@ -2470,7 +2475,152 @@ show_live_json() {
     done
     data live-json "$WORK/save.4" "$WORK/save.6" || return 2
 }
+# Version/update paths never load policy state or apply firewall rules.
+version_cli() {
+    if (($#==0)); then printf 'ip-port-allowlist %s (%s)\n' "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE"
+    elif (($#==1)) && [[ $1 == --json ]]; then printf '{"name":"ip-port-allowlist","version":"%s","language":"%s"}\n' "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE"
+    else error 'version only accepts --json'; return 2; fi
+}
+update_data() {
+    local -a engine=(perl)
+    [[ ${1:-} != apply ]] || engine=(exec perl)
+    "${engine[@]}" - "$@" <<'UPDATE_PERL'
+use strict;use warnings;use JSON::PP;use Digest::SHA qw(sha256_hex);use Cwd qw(abs_path);use File::Basename qw(dirname basename);use File::Temp qw(tempfile);use Fcntl qw(:DEFAULT :flock :mode);use IO::Handle;
+my $json=JSON::PP->new->canonical->utf8;
+sub bad {die "$_[0]\n"}
+sub raw {my($p,$max)=@_;my @s=lstat($p);bad('Not a regular file') unless @s&&S_ISREG($s[2])&&$s[7]<=$max;open my $h,'<:raw',$p or bad("Read failed: $!");local $/;my $v=<$h>;close $h or bad("Close failed: $!");return $v//''}
+sub ver {defined($_[0])&&!ref($_[0])&&$_[0]=~/\A(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\z/}
+sub compare {my @a=split /\./,$_[0];my @b=split /\./,$_[1];for(0..2){my $c=$a[$_]<=>$b[$_];return $c if $c}return 0}
+sub target {
+    my($p)=@_;my @s=lstat($p);bad('Update requires a root-owned regular script with one hard link and no group/other write permission') unless @s&&S_ISREG($s[2])&&$s[3]==1&&$s[4]==0&&!($s[2]&0022);
+    my $real=abs_path($p);bad('Cannot resolve script path') unless defined $real;
+    my @d=lstat(dirname($real));bad('Script directory must be root-owned and not writable by group or others') unless @d&&S_ISDIR($d[2])&&$d[4]==0&&!($d[2]&0022);
+    return ($real,\@s);
+}
+sub metadata {
+    my($p,$current,$lang)=@_;bad('Invalid local version or language') unless ver($current)&&($lang eq 'zh'||$lang eq 'en');
+    my $m=$json->decode(raw($p,65536));bad('Invalid release manifest') unless ref($m) eq 'HASH'&&($m->{schema}//0)==1&&($m->{product}//'') eq 'ip-port-allowlist'&&ver($m->{version})&&ref($m->{files}) eq 'HASH';
+    for my $l(qw(zh en)){my $f=$m->{files}{$l};my $name=$l eq 'zh'?'ip-port-allowlist.sh':'ip-port-allowlist-en.sh';bad('Invalid release artifact') unless ref($f) eq 'HASH'&&($f->{file}//'') eq $name&&($f->{sha256}//'')=~/\A[0-9a-f]{64}\z/&&defined($f->{bytes})&&!ref($f->{bytes})&&$f->{bytes}=~/\A[1-9][0-9]{0,6}\z/&&$f->{bytes}>=1000&&$f->{bytes}<=2097152}
+    my $c=compare($m->{version},$current);return {current=>$current,latest=>$m->{version},language=>$lang,status=>$c>0?'available':$c<0?'local-newer':'current',artifact=>$m->{files}{$lang}};
+}
+sub candidate {
+    my($p,$v,$lang,$digest,$bytes)=@_;my $b=raw($p,2097152);
+    bad('Downloaded size or SHA-256 mismatch') unless length($b)==$bytes&&sha256_hex($b) eq $digest;
+    bad('Downloaded file has an invalid identity, version, language or line ending') unless index($b,"#!/usr/bin/env bash\n")==0&&$b=~/^# ip-port-allowlist standalone script$/m&&$b=~/^SCRIPT_VERSION='\Q$v\E'$/m&&$b=~/^SCRIPT_LANGUAGE='\Q$lang\E'$/m&&$b!~/\r|\x00/;
+    return $b;
+}
+sub syncfile {my($p)=@_;system('sync','-f',$p)==0 or bad("Cannot synchronize $p")}
+sub writefile {my($h,$p,$b,$mode,$gid)=@_;binmode $h;print {$h} $b or bad("Write failed: $!");$h->flush or bad("Flush failed: $!");chmod($mode,$p)==1 or bad("chmod failed: $!");chown(0,$gid,$p)==1 or bad("chown failed: $!");$h->sync or bad("File sync failed: $!");close $h or bad("Close failed: $!")}
+my $ok=eval {
+    my $cmd=shift @ARGV;
+    if($cmd eq 'manifest'){
+        my($p,$v,$l,$fmt)=@ARGV;my $m=metadata($p,$v,$l);
+        if($fmt eq 'json'){print $json->encode($m),"\n"}else{print join("\t",$m->{latest},$m->{status},@{$m->{artifact}}{qw(file sha256 bytes)}),"\n"}
+    }elsif($cmd eq 'self'){
+        my($p,$v,$l)=@ARGV;my($real)=target($p);my $b=raw($real,2097152);
+        bad('Script on disk changed; restart before updating') unless $b=~/^SCRIPT_VERSION='\Q$v\E'$/m&&$b=~/^SCRIPT_LANGUAGE='\Q$l\E'$/m;
+        print $real,"\n",sha256_hex($b),"\n";
+    }elsif($cmd eq 'candidate'){candidate(@ARGV)}
+    elsif($cmd eq 'apply'){
+        my($incoming,$path,$oldhash,$v,$l,$digest,$bytes)=@ARGV;my($real,$st)=target($path);my $dir=dirname($real);my $b=candidate($incoming,$v,$l,$digest,$bytes);my $backupdir="$dir/.ip-port-allowlist-backups";
+        if(!lstat($backupdir)){mkdir($backupdir,0700) or ($!{EEXIST} || bad("Cannot create backup directory: $!"))}
+        my @ds=lstat($backupdir);bad('Unsafe backup directory') unless @ds&&S_ISDIR($ds[2])&&$ds[4]==0&&($ds[2]&07777)==0700;
+        my $lock="$backupdir/.update.lock";my @ls=lstat($lock);bad('Unsafe update lock') if @ls&&(!S_ISREG($ls[2])||$ls[3]!=1||$ls[4]!=0||($ls[2]&07777)!=0600);
+        sysopen(my $lh,$lock,O_WRONLY|O_CREAT|O_NOFOLLOW,0600) or bad("Cannot open update lock: $!");flock($lh,LOCK_EX|LOCK_NB) or bad('Another update is in progress');
+        my $old=raw($real,2097152);bad('Script changed during update; retry from the installed version') unless sha256_hex($old) eq $oldhash;
+        my($bh,$backup)=tempfile(basename($real).'.before-XXXXXXXX',DIR=>$backupdir,UNLINK=>0);writefile($bh,$backup,$old,0600,0);syncfile($backup);syncfile($backupdir);
+        my($nh,$next)=tempfile('.ip-port-allowlist-next-XXXXXXXX',DIR=>$dir,UNLINK=>0);my $renamed=0;
+        my($renaming,$interrupted)=(0,0);local $SIG{INT}=sub {$interrupted=1;bad('Update interrupted') unless $renaming};local $SIG{TERM}=$SIG{INT};
+        my $done=eval {
+            writefile($nh,$next,$b,$st->[2]&07777,$st->[5]);syncfile($next);
+            my($again,$fresh)=target($real);bad('Script inode changed during update') unless $again eq $real&&$fresh->[0]==$st->[0]&&$fresh->[1]==$st->[1]&&sha256_hex(raw($real,2097152)) eq $oldhash;
+            $renaming=1;rename($next,$real) or bad("Cannot replace script: $!");$renamed=1;$renaming=0;bad('Update interrupted') if $interrupted;syncfile($dir);1;
+        };
+        if(!$done){
+            local $SIG{INT}='IGNORE';local $SIG{TERM}='IGNORE';
+            my $e=$@;unlink($next) if !$renamed&&-f $next;
+            if($renamed){
+                bad("$e; installed file changed again; recovery copy: $backup") unless sha256_hex(raw($real,2097152)) eq $digest;
+                my $restored=eval {my($rh,$rp)=tempfile('.ip-port-allowlist-restore-XXXXXXXX',DIR=>$dir,UNLINK=>0);writefile($rh,$rp,$old,$st->[2]&07777,$st->[5]);rename($rp,$real) or bad("Restore failed: $!");syncfile($dir);1};
+                bad("$e; rollback failed; recovery copy: $backup") unless $restored;
+            }
+            bad("$e; original script preserved; backup: $backup");
+        }
+        print $backup,"\n";
+    }else{bad('Unknown update operation')}
+    1;
+};if(!$ok){my $e=$@||'Update failed';$e=~s/ at .* line \d+.*//s;print STDERR $e;print STDERR "\n" unless $e=~/\n\z/;exit 2}
+UPDATE_PERL
+}
+update_fetch() {
+    local url=$1 file=$2 limit=$3 code
+    code=$(curl -q --silent --show-error --fail --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 45 --max-filesize "$limit" --output "$file" --write-out '%{http_code}' "$url") || { error 'Update download failed; the installed script was not changed. Check the network and curl.'; return 2; }
+    [[ $code == 200 ]] || { error 'The update server did not return a complete file; the installed script was not changed.'; return 2; }
+}
+update_cli() {
+    trap - EXIT
+    local check=0 format=text confirm='' option work='' fields latest status artifact digest bytes target oldhash backup rc=0 apply_pid=''
+    while (($#)); do
+        option=$1; shift
+        case $option in
+            --check) check=1 ;;
+            --json) format=json ;;
+            --confirm) (($#)) || { error '--confirm requires UPDATE'; return 2; }; confirm=$1; shift ;;
+            *) error "Unknown update option: $option"; return 2 ;;
+        esac
+    done
+    [[ $format != json || $check == 1 ]] || { error 'update --json requires --check'; return 2; }
+    [[ -z $confirm || $confirm == UPDATE ]] || { error 'The update confirmation must be UPDATE'; return 2; }
+    [[ $check == 0 || -z $confirm ]] || { error '--check does not accept an update confirmation'; return 2; }
+    if ((check==0 && EUID!=0)); then error 'Updating the script requires root; checking does not.'; return 2; fi
+    local tool; local -a tools=(curl perl mktemp rm)
+    ((check)) || tools+=(bash sync)
+    for tool in "${tools[@]}"; do have_tool "$tool" || { error "Update requires a missing tool: $tool"; return 2; }; done
+    if ((check==0)); then
+        fields=$(update_data self "$SCRIPT_ENTRY" "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE") || return 2
+        target=${fields%$'\n'*}; oldhash=${fields##*$'\n'}
+    fi
+    work=$(mktemp -d "${TMPDIR:-/tmp}/ip-port-allowlist-update.XXXXXXXX") || return 2
+    trap '[[ -z $work ]] || rm -rf -- "$work"' EXIT
+    trap 'if [[ -n $apply_pid ]]; then kill -TERM "$apply_pid" 2>/dev/null || :; wait "$apply_pid" || :; fi; exit 130' INT TERM
+    local base='https://raw.githubusercontent.com/duya07/personal-scripts/main'
+    update_fetch "$base/ip-port-allowlist-release.json" "$work/release.json" 65536 || return 2
+    fields=$(update_data manifest "$work/release.json" "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE" fields) || { error 'Release manifest validation failed; the installed script was not changed.'; return 2; }
+    IFS=$'\t' read -r latest status artifact digest bytes <<< "$fields"
+    if [[ $format == json ]]; then update_data manifest "$work/release.json" "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE" json; return $?; fi
+    printf '  Current version: %s (%s); published version: %s\n' "$SCRIPT_VERSION" "$SCRIPT_LANGUAGE" "$latest"
+    case $status in
+        current) printf 'Already at the published version; no update is needed.\n'; return 0 ;;
+        local-newer) printf 'The local version is newer; downgrading is not performed.\n'; return 0 ;;
+    esac
+    printf 'An update is available. Only the script file is replaced; rules, configuration, logs and startup jobs are preserved.\n'
+    ((check==0)) || return 0
+    if [[ $confirm != UPDATE ]]; then
+        printf '  Enter y to update; any other input cancels:'
+        IFS= read -r confirm || { printf '\nUpdate cancelled.\n'; return 0; }
+        [[ ${confirm,,} == y ]] || { printf 'Update cancelled.\n'; return 0; }
+    fi
+    update_fetch "$base/$artifact" "$work/candidate.sh" 2097152 || return 2
+    update_data candidate "$work/candidate.sh" "$latest" "$SCRIPT_LANGUAGE" "$digest" "$bytes" || { error 'Update file validation failed; the installed script was not changed.'; return 2; }
+    bash -n "$work/candidate.sh" || { error 'Update syntax validation failed; the installed script was not changed.'; return 2; }
+    update_data apply "$work/candidate.sh" "$target" "$oldhash" "$latest" "$SCRIPT_LANGUAGE" "$digest" "$bytes" > "$work/applied" & apply_pid=$!
+    wait "$apply_pid"; rc=$?; apply_pid=''
+    if ((rc!=0)); then error 'Update did not complete; review the error and backup path above.'; return 2; fi
+    IFS= read -r backup < "$work/applied" || return 2
+    printf 'Updated to %s. Original script backup: %s\nRun the script again to load the new version; existing rules are unchanged.\n' "$latest" "$backup"
+    return 3
+}
+update_menu() {
+    local rc
+    page 'Script version and update' back
+    version_cli
+    update_cli <&0 & MENU_CHILD=$!
+    wait "$MENU_CHILD"; rc=$?; MENU_CHILD=''
+    if ((rc==3)); then exit 0; fi
+    return "$rc"
+}
 usage() {
+    version_cli
     cat <<'HELP'
 Usage: ip-port-allowlist.sh [command] [options]; run without arguments to start the menu.
   validate/set --ips IP[,CIDR] --ports PORT[,PORT] [--proto tcp|udp|both]
@@ -2491,6 +2641,8 @@ Usage: ip-port-allowlist.sh [command] [options]; run without arguments to start 
   log-rotate [--type operations|connections|both]
   log-clear [--type operations|connections|both] --confirm CLEAR
   log-maintain
+  --version | version [--json]
+  update [--check [--json]] [--confirm UPDATE](updates only the script; does not reload rules)
 Connection logging is off by default; when enabled it samples matching packets with a rate limit and collects records on view.
 Logs are stored only in .ip-port-allowlist.logs under the state directory; clearing does not delete the system journal.
 set/remove/block default protocol is TCP/UDP; set defaults to address family auto; remove/block default to IPv4+IPv6.
@@ -2504,6 +2656,16 @@ repair-state is only for an unparseable state file; by default it only backs up 
 HELP
 }
 cli() {
+    case ${1:-} in
+        --version|version) shift; version_cli "$@"; return $? ;;
+        update)
+            shift; local update_rc=0 update_child=''
+            trap 'if [[ -n $update_child ]]; then kill -TERM "$update_child" 2>/dev/null || :; wait "$update_child" || :; fi; exit 130' INT TERM
+            update_cli "$@" <&0 & update_child=$!
+            wait "$update_child"; update_rc=$?; update_child=''
+            trap 'printf "\nOperation interrupted\n" >&2; exit 130' INT TERM
+            ((update_rc!=3)) || update_rc=0; return "$update_rc" ;;
+    esac
     case ${1:-} in logs|log-settings|log-rotate|log-clear|log-maintain) logging_cli "$@"; return $? ;; esac
     if [[ ${1:-} == doctor ]]; then
         trap - EXIT
@@ -2697,6 +2859,7 @@ render_main_menu() {
     menu_option 7 'Block ports (deny all sources)' 31
     menu_option 8 'Set target host addresses'; menu_option 9 'Check / install dependencies'
     menu_option 10 'Logs'; menu_option 11 'Log rotation and clear settings'
+    menu_option 12 'Script version and update'
     ((broken==0)) || menu_option R 'Repair the corrupt state file' 31
     menu_option 0 'Quit' '2;37';printf '\n'
 }
@@ -3142,8 +3305,8 @@ menu() {
         if ((ready)) && [[ -z ${MENU_AUDITED:-} ]]; then logging_audit menu-open 0 ''; MENU_AUDITED=1; fi
         render_main_menu
         NOTICE=''
-        local keys='[0-11]'
-        ((broken==0)) || keys='[0-11 / R]'
+        local keys='[0-12]'
+        ((broken==0)) || keys='[0-12 / R]'
         printf '  Select %s: ' "$keys"
         IFS= read -r choice || exit 0
         [[ $choice != 0 ]] || exit 0
@@ -3160,10 +3323,11 @@ menu() {
             7) page 'Block ports · deny all sources' back; ports_menu block || rc=$? ;;
             8) page 'Set target host addresses' back; targets_menu || rc=$? ;;
             9) page 'Check / install dependencies'; menu_cli doctor --install || rc=$? ;;
-            R|r) if ((broken)); then page 'Corrupt state file · guided repair' back; repair_menu || rc=$?; else styled '  Enter 0-11' 33; fi ;;
+            R|r) if ((broken)); then page 'Corrupt state file · guided repair' back; repair_menu || rc=$?; else styled '  Enter 0-12' 33; fi ;;
             10) logs_menu || rc=$? ;;
             11) log_settings_menu || rc=$? ;;
-            *) if ((broken)); then styled '  Enter 0-11, or R to repair the state file' 33; else styled '  Enter 0-11' 33; fi ;;
+            12) update_menu || rc=$? ;;
+            *) if ((broken)); then styled '  Enter 0-12, or R to repair the state file' 33; else styled '  Enter 0-12' 33; fi ;;
         esac
         ((rc!=11)) || exit 0
         ((rc!=10)) || continue
