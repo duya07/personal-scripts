@@ -25,7 +25,7 @@
 | [`kejilion.sh`](#kejilion) | Linux 运维工具箱（科技lion 定制版） | `v4.5.10` | [kejilion/sh](https://github.com/kejilion/sh) |
 | [`port-traffic-dog.sh`](#traffic-dog) | 按端口统计与限制流量 | `v1.2.5` | [zywe03/realm-xwPF](https://github.com/zywe03/realm-xwPF/blob/main/port-traffic-dog-README.md) |
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
-| [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | — | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
+| [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | `v1.0.3` | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
 | [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | `v1.0.0` | — |
 
 <br>
