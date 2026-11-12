@@ -28,7 +28,7 @@
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
 | [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | `v1.0.3` | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
 | [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | `v1.0.0` | — |
-| [`openconnect-master`](#openconnect-master) | OpenConnect VPN 管理（netns 代理 / 自动重连 / 诊断日志） | `v8.1.0` | [duya07/openconnect-master](https://github.com/duya07/openconnect-master) |
+| [`openconnect-master`](#openconnect-master) | OpenConnect VPN 管理（netns 代理 / 自动重连 / 诊断日志） | `v8.1.1` | [duya07/openconnect-master](https://github.com/duya07/openconnect-master) |
 
 <br>
 
