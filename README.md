@@ -9,7 +9,8 @@
 <a href="#traffic-dog">🐶 端口流量狗</a> ·
 <a href="#self-detect">🔍 self-detect.sh</a> ·
 <a href="#easy-caddy">🌐 easy_Caddy</a> ·
-<a href="#ip-allowlist">🛡️ IP 白名单</a>
+<a href="#ip-allowlist">🛡️ IP 白名单</a> ·
+<a href="#openconnect-master">🔐 openconnect-master</a>
 
 </div>
 
@@ -27,6 +28,7 @@
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
 | [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | `v1.0.3` | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
 | [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | `v1.0.0` | — |
+| [`openconnect-master`](#openconnect-master) | OpenConnect VPN 管理（netns 代理 / 自动重连 / 诊断日志） | `v8.0.0` | [duya07/openconnect-master](https://github.com/duya07/openconnect-master) |
 
 <br>
 
@@ -220,6 +222,20 @@ sudo bash ./ip-port-allowlist.sh log-clear --type both --confirm CLEAR
 - **SSH 防误封**：变更前会检查 `SSH_CONNECTION`，若会阻断当前 SSH 来源则拒绝写入。
 - **事务与恢复**：失败或可捕获的中断/异常自动回滚内核/状态；强制终止后保留 journal，下次 `recover` 恢复；状态文件损坏时用 `repair-state --from-live/--empty` 引导修复，未完成事务优先 `recover`。
 - **开机恢复**：保存状态不等于开机自动恢复，`restore` 需自行安排启动任务，不会自动创建服务。
+
+<br>
+
+<a id="openconnect-master"></a>
+
+## 🔐 6 · openconnect-master —— OpenConnect VPN 管理
+
+[duya07/openconnect-master](https://github.com/duya07/openconnect-master) —— 把 OpenConnect（AnyConnect / Pulse / Juniper NC / GlobalProtect 等）托管成 systemd 服务的单文件 Bash 工具，源码与使用说明维护在该仓库。
+
+- **三种模式**：Netns 隔离 + SOCKS5 代理（宿主网络不受影响）、全局 VPN（自动保护 SSH）、ocproxy 轻量代理。
+- **自动重连**：openconnect 退出后按原因处理（服务器到期终止约 2 秒重连、网络错误退避重试、认证失败暂停防锁号），重连期间代理保持不动。
+- **诊断与设置**：内置长期诊断日志与 `ocm log report` 断线报告；⚙️ 设置菜单逐项说明可选参数，`ocm -h` 命令行可脚本化。
+
+安装命令与完整说明见该仓库 README。
 
 <br>
 
