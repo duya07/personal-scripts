@@ -28,7 +28,7 @@
 | [`self-detect.sh`](#self-detect) | OpenGFW + Nmap 本机端口自查 | `v3.2.5` | [duya07/personal-scripts](https://github.com/duya07/personal-scripts) |
 | [`easy_Caddy`](#easy-caddy) | Caddy 部署 / 反代 / 证书同步 | `v1.0.3` | [duya07/easy_Caddy](https://github.com/duya07/easy_Caddy) |
 | [`ip-port-allowlist.sh`](#ip-allowlist) | IPv4/IPv6 TCP/UDP 端口白名单与连接日志 | `v1.0.0` | — |
-| [`openconnect-master`](#openconnect-master) | OpenConnect VPN 管理（netns 代理 / 自动重连 / 诊断日志） | `v8.1.1` | [duya07/openconnect-master](https://github.com/duya07/openconnect-master) |
+| [`openconnect-master`](#openconnect-master) | OpenConnect VPN 管理（netns 代理 / 自动重连 / 诊断日志） | `v8.2.0` | [duya07/openconnect-master](https://github.com/duya07/openconnect-master) |
 
 <br>
 
@@ -232,9 +232,9 @@ sudo bash ./ip-port-allowlist.sh log-clear --type both --confirm CLEAR
 [duya07/openconnect-master](https://github.com/duya07/openconnect-master) —— 把 OpenConnect（AnyConnect / Pulse / Juniper NC / GlobalProtect 等）托管成 systemd 服务的单文件 Bash 工具，源码与使用说明维护在该仓库。
 
 - **三种模式**：Netns 隔离 + SOCKS5 代理（宿主网络不受影响）、全局 VPN（自动保护 SSH）、ocproxy 轻量代理。
-- **自动重连**：openconnect 退出后按原因处理（服务器到期终止约 2 秒重连、网络错误退避重试、认证失败暂停防锁号），重连期间代理保持不动。
+- **自动重连**：openconnect 退出后按原因处理（服务器到期终止约 2 秒重连、网络错误退避重试、认证失败暂停防锁号），重连期间代理保持不动；可选定时重连（如会话满 110 分钟主动重连，赶在服务器 2 小时上限之前，v8.2 新增）。
 - **断线保护**：VPN 掉线期间代理可选改走 VPS 出口、直接失败，或回落到你指定的备用代理（socks5 / http / https / ss 等，v8.1 新增），恢复后自动切回。
-- **诊断与设置**：内置长期诊断日志与 `ocm log report` 断线报告；⚙️ 设置菜单逐项说明可选参数，`ocm -h` 命令行可脚本化。
+- **诊断与设置**：内置长期诊断日志与 `ocm log report` 断线报告；🔧 设置菜单逐项说明可选参数，`ocm -h` 命令行可脚本化。
 
 安装命令与完整说明见该仓库 README。
 
